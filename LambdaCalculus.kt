@@ -138,6 +138,18 @@ fun resolveRedex(l:LambdaCalculus) : LambdaCalculus {
  * This is evaluation of lambda calculus, where we resolve leftmost outermost redex.
  * More specifically, we resolve redex that is not contained in other redex, and one that is leftmost among them.
  */
+fun normalOrderReduction(l:LambdaCalculus) : LambdaCalculus {
+    var current = l
+    while (true) {
+        val result = normalOrderStep(current)
+        if (result != null) {
+            current = result
+        }
+        else {
+            return current
+        }
+    }
+}
 
 /**
  * This function performs one step in normal order reduction.
