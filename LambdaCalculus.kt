@@ -1,14 +1,50 @@
 import java.lang.IllegalArgumentException
 
-sealed class LambdaCalculus
+sealed class LambdaCalculus {
+    abstract infix fun alphaEquiv(other:LambdaCalculus) : Boolean
+}
 data class Id(val name : String) : LambdaCalculus() {
     override fun toString() = name
+    override fun alphaEquiv(other:LambdaCalculus) : Boolean {
+        return when (other) {
+            is Id -> {
+                name == other.name
+            }
+            else -> {
+                false
+            }
+        }
+    }
 }
 data class App(val first:LambdaCalculus, val second:LambdaCalculus) : LambdaCalculus() {
     override fun toString() = "($first $second)"
+    override fun alphaEquiv(other:LambdaCalculus) : Boolean {
+        return when (other) {
+            is App -> {
+                first.alphaEquiv(other.first) && second.alphaEquiv(other.second)
+            }
+            else -> {
+                false
+            }
+        }
+    }
 }
 data class Lambda(val parameter : String, val body : LambdaCalculus) : LambdaCalculus() {
-    override fun toString() = "l $parameter . $body"
+    override fun toString() = "l $parameter.{$body}"
+    override fun alphaEquiv(other:LambdaCalculus) : Boolean {
+        return when (other) {
+            is Lambda -> {
+                if (parameter == other.parameter) {
+                    body.alphaEquiv(other.body)
+                } else {
+                    body.alphaEquiv(replace(other.body, other.parameter, Id(parameter)))
+                }
+            }
+            else -> {
+                false
+            }
+        }
+    }
 }
 
 fun freeVariable(l:LambdaCalculus) : Set<String> {
@@ -119,6 +155,7 @@ fun replace(l:LambdaCalculus, x:String, other:LambdaCalculus) : LambdaCalculus {
 /**
  * This function is helper function for Normal Order Reduction.
  * It changes redex (lambda x.e1) e2 into e1/x->e2.
+ * Actually, this function performs both beta reduction and eta reduction.
  */
 fun resolveRedex(l:LambdaCalculus) : LambdaCalculus {
     when (l) {
