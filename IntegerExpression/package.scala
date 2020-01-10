@@ -66,6 +66,7 @@ package object IntegerExpression extends Language {
       parenWrap(op ~ expr ~ expr) ^^ {case f ~ s ~ t => IntOp(f, s, t)} |
       int ^^ {(n => Num(n))} |
       str ^^ {(s => Var(s))}
+    def apply(str:String):IntegerExpression = parseAll(expr, str).getOrElse(throw new LanguageException("Bad Syntax"))
   }
 }
 
