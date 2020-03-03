@@ -14,41 +14,41 @@ From PLT Require Import IntegerExpression.
 Import ListNotations.
 
 Inductive SILang: Type :=
-  | SSkip : SILang
-  | SAssn (x:string) (a:aexp) : SILang
-  | SSeq (first:SILang) (second:SILang) : SILang
-  | SIf (cond:bexp) (thenE:SILang) (elseE:SILang) : SILang
-  | SWhile (cond:bexp) (body:SILang) : SILang.
+  | SISkip : SILang
+  | SIAssn (x:string) (a:aexp) : SILang
+  | SISeq (first:SILang) (second:SILang) : SILang
+  | SIIf (cond:bexp) (thenE:SILang) (elseE:SILang) : SILang
+  | SIWhile (cond:bexp) (body:SILang) : SILang.
 
 Reserved Notation "st '=[' c ']=>' st'"
                   (at level 40).
 
 Inductive sieval : SILang -> state -> state -> Prop :=
-  | E_Skip : forall st,
-      st =[ SSkip ]=> st
-  | E_Ass  : forall st a1 n x,
+  | SIE_Skip : forall st,
+      st =[ SISkip ]=> st
+  | SIE_Ass  : forall st a1 n x,
       aeval st a1 = n ->
-      st =[ SAssn x a1 ]=> (x !-> n ; st)
-  | E_Seq : forall c1 c2 st st' st'',
+      st =[ SIAssn x a1 ]=> (x !-> n ; st)
+  | SIE_Seq : forall c1 c2 st st' st'',
       st  =[ c1 ]=> st'  ->
       st' =[ c2 ]=> st'' ->
-      st  =[ SSeq c1 c2 ]=> st''
-  | E_IfTrue : forall st st' b c1 c2,
+      st  =[ SISeq c1 c2 ]=> st''
+  | SIE_IfTrue : forall st st' b c1 c2,
       beval st b = true ->
       st =[ c1 ]=> st' ->
-      st =[ SIf b c1 c2 ]=> st'
-  | E_IfFalse : forall st st' b c1 c2,
+      st =[ SIIf b c1 c2 ]=> st'
+  | SIE_IfFalse : forall st st' b c1 c2,
       beval st b = false ->
       st =[ c2 ]=> st' ->
-      st =[ SIf b c1 c2 ]=> st'
-  | E_WhileFalse : forall b st c,
+      st =[ SIIf b c1 c2 ]=> st'
+  | SIE_WhileFalse : forall b st c,
       beval st b = false ->
-      st =[ SWhile b c ]=> st
-  | E_WhileTrue : forall st st' st'' b c,
+      st =[ SIWhile b c ]=> st
+  | SIE_WhileTrue : forall st st' st'' b c,
       beval st b = true ->
       st  =[ c ]=> st' ->
-      st' =[ SWhile b c ]=> st'' ->
-      st  =[ SWhile b c ]=> st''
+      st' =[ SIWhile b c ]=> st'' ->
+      st  =[ SIWhile b c ]=> st''
 
   where "st =[ c ]=> st'" := (sieval c st st').
 

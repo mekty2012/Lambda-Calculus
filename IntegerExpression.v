@@ -193,3 +193,4 @@ Proof.
   apply bexp_denot_coincidence. apply H.
   Qed.
 
+(* TODO : add substitution and substitution lemma. *)
