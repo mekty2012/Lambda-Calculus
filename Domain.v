@@ -250,10 +250,196 @@ Definition discrete_cpo (X : Type) :=
   (discrete_le_lub X)
   (discrete_lub_le X).
 
-(*
-  TODO : Show finite product of cpo is also cpo.
- *)
+Definition product_le (D1 D2 : cpo) (x y : prod D1 D2) :=
+  match x with
+  | pair x1 x2 =>
+    match y with
+    | pair y1 y2 => (Ole D1 x1 y1) /\ (Ole D2 x2 y2)
+    end
+  end.
+
+Lemma product_le_refl (D1 D2 : cpo):
+  forall x, product_le D1 D2 x x.
+Proof.
+  intros. unfold product_le. destruct x. split.
+  apply (Ole_refl D1). apply (Ole_refl D2).
+  Qed.
+
+Lemma product_le_trans (D1 D2 : cpo) :
+  forall x y z, product_le D1 D2 x y -> product_le D1 D2 y z -> product_le D1 D2 x z.
+Proof.
+  unfold product_le. intros. destruct x, y, z.
+  destruct H, H0.
+  split.
+  - eapply (Ole_trans D1). apply H. apply H0.
+  - eapply (Ole_trans D2). apply H1. apply H2.
+  Qed.
+
+Definition product_ord (D1 D2 : cpo) :=
+  mk_ord
+  (prod D1 D2)
+  (product_le D1 D2)
+  (product_le_refl D1 D2)
+  (product_le_trans D1 D2).
+
+Lemma fst_product_mono : 
+  forall (D1 D2 : cpo) (c : fmono natO (product_ord D1 D2)),
+  monotonic natO D1 (fun n => fst (c n)).
+Proof.
+  intros. destruct c. unfold monotonic. intros.
+  unfold monotonic in fmonotonic0. apply fmonotonic0 in H.
+  simpl in H. simpl. destruct (fmonot0 x), (fmonot0 y).
+  simpl. unfold product_le in H. destruct H as [H _]. apply H.
+  Qed.
+
+Lemma snd_product_mono : 
+  forall (D1 D2 : cpo) (c : fmono natO (product_ord D1 D2)),
+  monotonic natO D2 (fun n => snd (c n)).
+Proof.
+  intros. destruct c. unfold monotonic. intros.
+  unfold monotonic in fmonotonic0. apply fmonotonic0 in H.
+  simpl in H. simpl. destruct (fmonot0 x), (fmonot0 y).
+  simpl. unfold product_le in H. destruct H as [_ H]. apply H.
+  Qed.
+
+Definition product_lubp (D1 D2 : cpo) (c : fmono natO (product_ord D1 D2)) :=
+  pair (lubp D1 (mk_fmono natO D1 (fun (n:natO) => fst (c n)) (fst_product_mono D1 D2 c))) 
+       (lubp D2 (mk_fmono natO D2 (fun (n:natO) => snd (c n)) (snd_product_mono D1 D2 c))).
+
+Lemma product_le_lub :
+  forall (D1 D2 : cpo) (c : fmono natO (product_ord D1 D2)) (n : nat),
+  (Ole (product_ord D1 D2)) (c n) (product_lubp D1 D2 c).
+Proof.
+  intros.
+  pose proof (le_lub D1 (mk_fmono natO D1 (fun (n:natO) => fst (c n)) 
+                                          (fst_product_mono D1 D2 c)) n).
+  pose proof (le_lub D2 (mk_fmono natO D2 (fun (n:natO) => snd (c n)) 
+                                          (snd_product_mono D1 D2 c)) n).
+  simpl in H. simpl in H0.
+  simpl. unfold product_le.
+  destruct (c n). simpl in *. split; assumption.
+  Qed.
+
+Lemma product_lub_le : 
+  forall (D1 D2 : cpo) (c: fmono natO (product_ord D1 D2)) (x : product_ord D1 D2),
+  (forall n, (Ole (product_ord D1 D2)) (c n) x) -> 
+  (Ole (product_ord D1 D2)) (product_lubp D1 D2 c) x.
+Proof.
+  intros. simpl. destruct x. split.
+  - apply (lub_le D1). simpl in H. intros.
+    pose proof (H n). simpl.
+    destruct (c n). simpl. unfold product_le in H0. destruct H0.
+    apply H0.
+  - apply (lub_le D2). simpl in H. intros.
+    pose proof (H n). simpl.
+    destruct (c n). simpl. unfold product_le in H0. destruct H0.
+    apply H1.
+  Qed.
+
+Definition product_cpo (D1 D2 : cpo) : cpo :=
+  mk_cpo
+  (product_ord D1 D2)
+  (product_lubp D1 D2)
+  (product_le_lub D1 D2)
+  (product_lub_le D1 D2).
 
 Class Pointed(D : cpo) := {bot:D; Pleast : forall d : D, Ole D bot d}.
+
+Instance prod_pointed (A B : cpo) (pa : Pointed A) (pb : Pointed B) : Pointed (product_cpo A B).
+Proof.
+  destruct pa. destruct pb.
+  exists (pair bot0 bot1). intros. simpl.
+  destruct d. split; auto.
+  Defined.
+
+Instance fun_pointed (A B : cpo) (pb : Pointed B) : Pointed (fconti_cpo A B).
+Proof.
+  destruct pb.
+  assert (monotonic A B (fun t => bot0)).
+  { unfold monotonic. intros. apply (Ole_refl B). }
+  remember (mk_fmono A B (fun t => bot0) H) as fmonobot.
+  assert (continuous A B fmonobot).
+  { unfold continuous. intros. subst. simpl. apply Pleast0. }
+  remember (mk_fconti A B fmonobot H0).
+  exists f. intros. simpl. unfold cle.
+  intros. rewrite Heqf. simpl. rewrite Heqfmonobot. simpl. apply Pleast0.
+  Defined.
+
+Fixpoint repeat (C : cpo) (D : Pointed C) (f : fconti C C) (n : nat) : C :=
+  match n with
+  | 0 => (bot)
+  | S n' => (fcontit C C f) (repeat C D f n')
+  end.
+
+Lemma repeat_mono :
+  forall (C : cpo) (D : Pointed C) (f : fconti C C),
+  monotonic natO C (repeat C D f).
+Proof.
+  intros. unfold monotonic. intros. simpl in H. generalize dependent x. induction y.
+  - intros. assert (x = 0) by omega. subst. apply (Ole_refl C).
+  - intros. destruct x.
+    + simpl. apply Pleast.
+    + simpl. destruct f. simpl. destruct fcontit0. simpl.
+      apply fmonotonic0. apply IHy. omega.
+  Qed.
+
+Definition repeat_fmono (C : cpo) (D : Pointed C) (f : fconti C C) : fmono natO C :=
+  mk_fmono natO C
+  (repeat C D f)
+  (repeat_mono C D f).
+
+Definition fixp (C : cpo) (D : Pointed C) (f : fconti C C) : C :=
+  lubp C (repeat_fmono C D f).
+
+(* TODO : fixp itself is continuous. *)
+
+Definition admmisible (D : cpo) (pd : Pointed D) (P : D -> Prop) :=
+  forall (c : fmono natO D),
+  (forall n, P (c n)) -> P (lubp D c).
+
+Definition fixp_ind (D : cpo) (pd : Pointed D) :
+  forall (F : fconti D D) (P : D -> Prop),
+  admmisible D pd P -> 
+  P bot -> 
+  (forall x, P x -> P ((fcontit D D F) x)) ->
+  P (fixp D pd F).
+Proof.
+  intros. unfold fixp. unfold admmisible in H.
+  apply H. induction n.
+  - simpl. apply H0.
+  - simpl. apply H1. apply IHn.
+  Qed.
+
+Variable D : cpo.
+
+CoInductive Stream := 
+  Eps : Stream -> Stream |
+  Val : D -> Stream.
+
+Fixpoint pred_nth (x : Stream) (n : nat) : Stream :=
+  match x, n with
+  | Eps x', S n' => pred_nth x' n'
+  | Val d, _ => Val d
+  | Eps x', 0 => x
+  end.
+
+CoInductive DLle : Stream -> Stream -> Prop :=
+  | DLleEps : forall x y, DLle x y -> DLle (Eps x) (Eps y)
+  | DLleEpsVal : forall x d, DLle x (Val d) -> DLle (Eps x) (Val d)
+  | DLleVal : forall d d' n y, 
+      pred_nth y n = Val d' -> Ole D d d' -> DLle (Val d) y.
+
+Lemma DLle_rec : forall R : Stream -> Stream -> Prop,
+  (forall x y, R (Eps x) (Eps y) -> R x y) ->
+  (forall x d, R (Eps x) (Val d) -> R x (Val d)) ->
+  (forall d y, R (Val d) y -> exists n d', pred_nth y n = Val d' /\ Ole D d d') ->
+  forall x y, R x y -> DLle x y.
+Proof.
+  Admitted.
+
+(* The proof here uses notion of coinduction~cofixed point. *)
+
+
+
 
 
