@@ -425,36 +425,111 @@ Proof.
   - simpl. apply H1. apply IHn.
   Qed.
 
-Variable D : cpo.
+CoInductive Stream (D : cpo) := 
+  Eps : Stream D -> Stream D |
+  Val : D -> Stream D.
 
-CoInductive Stream := 
-  Eps : Stream -> Stream |
-  Val : D -> Stream.
-
-Fixpoint pred_nth (x : Stream) (n : nat) : Stream :=
+Fixpoint pred_nth {D : cpo} (x : Stream D) (n : nat) : Stream D :=
   match x, n with
-  | Eps x', S n' => pred_nth x' n'
-  | Val d, _ => Val d
-  | Eps x', 0 => x
+  | Eps _ x', S n' => pred_nth x' n'
+  | Val _ d, _ => x
+  | Eps _ x', 0 => x
   end.
 
-CoInductive DLle : Stream -> Stream -> Prop :=
-  | DLleEps : forall x y, DLle x y -> DLle (Eps x) (Eps y)
-  | DLleEpsVal : forall x d, DLle x (Val d) -> DLle (Eps x) (Val d)
+CoInductive DLle {D : cpo} : Stream D -> Stream D -> Prop :=
+  | DLleEps : forall x y, DLle x y -> DLle (Eps D x) (Eps D y)
+  | DLleEpsVal : forall x d, DLle x (Val D d) -> DLle (Eps D x) (Val D d)
   | DLleVal : forall d d' n y, 
-      pred_nth y n = Val d' -> Ole D d d' -> DLle (Val d) y.
+      pred_nth y n = Val D d' -> Ole D d d' -> DLle (Val D d) y.
 
-Lemma DLle_rec : forall R : Stream -> Stream -> Prop,
-  (forall x y, R (Eps x) (Eps y) -> R x y) ->
-  (forall x d, R (Eps x) (Val d) -> R x (Val d)) ->
-  (forall d y, R (Val d) y -> exists n d', pred_nth y n = Val d' /\ Ole D d d') ->
+Lemma DLle_rec {D : cpo} : forall R : Stream D -> Stream D -> Prop,
+  (forall x y, R (Eps D x) (Eps D y) -> R x y) ->
+  (forall x d, R (Eps D x) (Val D d) -> R x (Val D d)) ->
+  (forall d y, R (Val D d) y -> exists n d', pred_nth y n = Val D d' /\ Ole D d d') ->
   forall x y, R x y -> DLle x y.
 Proof.
-  Admitted.
+  cofix H.
+  intros.
+  destruct x, y.
+  - apply H0 in H3. apply DLleEps. apply H with R; auto.
+  - apply DLleEpsVal. apply H1 in H3. apply H with R; auto.
+  - apply H2 in H3. destruct H3 as [n [d' [H31 H32]]].
+    eapply DLleVal; eauto.
+  - apply H2 in H3. destruct H3 as [n [d' [H31 H32]]].
+    eapply DLleVal; eauto.
+  Qed.
 
-(* The proof here uses notion of coinduction~cofixed point. *)
+Lemma DLle_refl {D : cpo} : forall (c : Stream D),
+  DLle c c.
+Proof.
+  intros. apply DLle_rec with eq.
+  - intros. inversion H. reflexivity.
+  - intros. inversion H.
+  - intros. subst. exists 0. exists d. split.
+    + simpl. reflexivity.
+    + apply (Ole_refl D).
+  - reflexivity.
+  Qed.
 
+Lemma DLle_exists_pred {D : cpo} : forall (c1 c2 : Stream D) (d : D) (n : nat),
+  pred_nth c1 n = Val D d ->
+  DLle c1 c2 ->
+  exists n' d', pred_nth c2 n' = Val D d' /\ Ole D d d'.
+Proof.
+  intros c1 c2 d n. generalize dependent c1.
+  generalize dependent c2. generalize dependent d.
+  induction n; intros.
+  - simpl in H. destruct c1.
+    + discriminate.
+    + inversion H. inversion H0; subst.
+      exists n. exists d'. split. apply H3. apply H4.
+  - simpl in H. destruct c1.
+    + inversion H0; subst.
+      * apply IHn with (c2 := y) in H.
+        destruct H as [n' [d' [H H']]].
+        exists (S n'). exists d'. simpl. split. apply H. apply H'. apply H2.
+      * apply IHn with (c2 := (Val D d0)) in H.
+        destruct H as [n' [d' [H H']]].
+        2 : { apply H2. }
+        exists 0. exists d0. split. reflexivity.
+        destruct n'; simpl in H; inversion H; subst; apply H'.
+    + inversion H; subst. clear H.
+      inversion H0; subst.
+      exists n0. exists d'. split. apply H1. apply H2.
+  Qed.
 
+Lemma DLle_trans {D : cpo} : forall (c1 c2 c3 : Stream D),
+  DLle c1 c2 -> DLle c2 c3 -> DLle c1 c3.
+Proof.
+  intros. apply DLle_rec with (fun t1 => fun t2 => exists t, DLle t1 t /\ DLle t t2).
+  - intros. destruct H1 as [t [H1 H2]].
+    inversion H1; subst.
+    + inversion H2; subst.
+      exists y0. split; auto.
+    + exists (Val D d). inversion H2; subst. split; auto.
+      destruct n.
+      * simpl in H5. discriminate.
+      * simpl in H5. eapply DLleVal. apply H5. apply H6.
+  - intros. destruct H1 as [t [H1 H2]].
+    inversion H1; subst.
+    + exists y. split; auto. inversion H2; auto.
+    + exists (Val D d0).
+      split; auto.
+  - intros. destruct H1 as [t [H1 H2]].
+    inversion H1; subst.
+    pose proof (DLle_exists_pred t y d' n H4 H2).
+    destruct H3 as [n' [d'0 [H31 H32]]].
+    exists n'. exists d'0. split. apply H31.
+    eapply (Ole_trans D). apply H5. apply H32.
+  - exists c2. split; auto.
+  Qed.
 
+Definition DL_ord (D : cpo) : ord :=
+  mk_ord
+  (Stream D)
+  DLle
+  DLle_refl
+  DLle_trans.
 
+(** TODO : DL is cpo. *)
 
