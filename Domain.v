@@ -180,8 +180,7 @@ Lemma lubpf_fmono_conti :
   forall (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)),
   continuous D1 D2 (lubpf_fmono D1 D2 c).
 Proof.
-  intros. unfold continuous. intros.
-  destruct c.
+  
   Admitted.
 
 Definition lubpf_fconti (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)) :=
@@ -193,14 +192,30 @@ Lemma lubpf_le_lub :
   forall (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)) (n : nat),
   (Ole (conti_fun_ord D1 D2)) (c n) (lubpf_fconti D1 D2 c).
 Proof.
-  Admitted.
+  intros. simpl. unfold cle. intros. simpl.
+  unfold lubpf.
+  pose proof (le_lub D2 
+    {| fmonot := conti_swap D1 D2 c t; fmonotonic := conti_swap_mono D1 D2 c t |}
+    n).
+  simpl in H.
+  replace (fcontit D1 D2 (c n) t) with (conti_swap D1 D2 c t n).
+  apply H.
+  unfold conti_swap. reflexivity.
+  Qed.
 
 Lemma lubpf_lub_le : 
   forall (D1 D2 : cpo) (c: fmono natO (conti_fun_ord D1 D2)) (x : conti_fun_ord D1 D2),
   (forall n, (Ole (conti_fun_ord D1 D2)) (c n) x) -> 
   (Ole (conti_fun_ord D1 D2)) (lubpf_fconti D1 D2 c) x.
 Proof.
-  Admitted.
+  intros. simpl. unfold cle. intros. simpl.
+  unfold lubpf. Search lubp.
+  pose proof (lub_le D2 
+    {| fmonot := conti_swap D1 D2 c t; fmonotonic := conti_swap_mono D1 D2 c t |}
+    (fcontit D1 D2 x t)
+    ).
+  apply H0. intros. simpl.
+  unfold conti_swap. apply H. Qed.
 
 Definition fconti_cpo (D1 D2 : cpo) := mk_cpo 
   (conti_fun_ord D1 D2)
