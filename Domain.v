@@ -531,5 +531,71 @@ Definition DL_ord (D : cpo) : ord :=
   DLle_refl
   DLle_trans.
 
-(** TODO : DL is cpo. *)
+Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
+
+Lemma DL_le_lub (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (n : nat),
+    (Ole (DL_ord D)) (c n) (DL_lubp D c).
+Proof.
+  Admitted.
+
+Lemma DL_lub_le (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (x : (DL_ord D)),
+    (forall n, (Ole (DL_ord D)) (c n) x) -> (Ole (DL_ord D)) (DL_lubp D c) x.
+Proof.
+  Admitted.
+
+Definition DL_cpo (D : cpo) := 
+  mk_cpo
+  (DL_ord D)
+  (DL_lubp D)
+  (DL_le_lub D)
+  (DL_lub_le D).
+
+CoFixpoint DL_bot (D : cpo) : Stream D := Eps D (DL_bot D).
+
+Lemma DL_pointed (D : cpo) :
+  forall (d : DL_ord D),
+  Ole (DL_ord D) (DL_bot D) d.
+Proof.
+  Admitted.
+
+Instance DL_Pointed (D : cpo) : Pointed (DL_cpo D).
+Proof.
+  exists (DL_bot D). apply (DL_pointed D). Qed.
+
+Definition lift {D : cpo} (d : D): DL_cpo D := Val D d. 
+
+(* TODO : lift itself is also continuous. *)
+
+CoFixpoint kleisli (D E : cpo) (f : fconti D (DL_cpo E)) (d : DL_cpo D): (DL_cpo E) :=
+  match d with
+  | Eps _ dl => Eps E (kleisli D E f dl)
+  | Val _ d' => (fcontit D (DL_cpo E) f) d'
+  end.
+
+Lemma kleisli_mono (D E : cpo) :
+  forall (f : fconti D (DL_cpo E)),
+  monotonic (DL_cpo D) (DL_cpo E) (kleisli D E f).
+Proof.
+  Admitted.
+
+Definition kleisli_fmono (D E : cpo) (f : fconti D (DL_cpo E)) := 
+  mk_fmono (DL_cpo D) (DL_cpo E)
+  (kleisli D E f)
+  (kleisli_mono D E f).
+
+Lemma kleisli_conti (D E : cpo) :
+  forall (f : fconti D (DL_cpo E)),
+  continuous (DL_cpo D) (DL_cpo E) (kleisli_fmono D E f).
+Proof.
+  Admitted.
+
+Definition kleisli_fconti (D E : cpo) (f : fconti D (DL_cpo E)) :=
+  mk_fconti (DL_cpo D) (DL_cpo E)
+  (kleisli_fmono D E f)
+  (kleisli_conti D E f).
+
+(* TODO : kleisli itself is also continuous function *)
+
 
