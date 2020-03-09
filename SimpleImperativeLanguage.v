@@ -80,3 +80,15 @@ Proof.
       { apply IHsieval1. apply H4. }
       apply IHsieval2. subst. apply H7.
   Qed.
+
+From PLT Require Import Domain.
+
+Definition discrete_nat_cpo := discrete_cpo nat.
+Definition discrete_string_cpo := discrete_cpo string.
+Definition state_cpo := fconti_cpo discrete_nat_cpo discrete_string_cpo.
+Definition semantic_cpo := fconti_cpo (state_cpo) (DL_cpo state_cpo).
+
+
+
+
+

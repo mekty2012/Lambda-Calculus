@@ -275,8 +275,20 @@ Lemma Exp2_Infinite : Infinite Exp2.
 Lemma bool_alternate_eqn : forall b, bool_alternate b =
                                      LCons b (bool_alternate (negb b)).
 *)
+Lemma iterates_Infinite : forall (A : Type) (f : A -> A) (n : A),
+  Infinite (iterates f n).
+Proof.
+  intro A. cofix H. intros.
+  unwind (iterates f n) (LCons n (iterates f (f n))).
+  rewrite eg. apply Infinite_LCons.
+  apply H. Qed.
 
-
+Lemma bool_alternate_eqn : 
+  forall b, alter b = LCons b (alter (negb b)).
+Proof.
+  intro.
+  unwind (alter b) (LCons b (alter (negb b))).
+  apply eg. Qed.
 
 CoFixpoint LAppend (A:Type) (u v:LList A) : LList A :=
   match u with

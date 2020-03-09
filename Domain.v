@@ -15,6 +15,17 @@ From Coq Require Import Strings.String.
 
 Import ListNotations.
 
+(** Basic Domain Theory *)
+
+(*
+   The normal definition of poset contains antisymmetry, meaning
+   x <= y -> y <= x -> x = y
+   however we do not include it here.
+   First, we can induce poset with antisymmetry by creating
+   congruence class with relation a ~ b := a <= b /\ b <= a.
+   Second, adding antisymmetry will break our approach on 
+   creating pointed cpo from cpo. The detail on this will explained later.
+ *)
 Record ord:= mk_ord 
   { tord :> Type;
     Ole : tord -> tord -> Prop;
@@ -175,6 +186,19 @@ Definition lubpf_fmono (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)) :=
   mk_fmono D1 D2
   (lubpf D1 D2 c)
   (lubpf_mono D1 D2 c).
+
+
+Lemma lubp_preserves_order : 
+  forall (D : cpo) (f1 f2 : fmono natO D),
+  (forall n, Ole D (f1 n) (f2 n)) -> Ole D (lubp D f1) (lubp D f2).
+Proof.
+  intros.
+  assert (forall n, Ole D (f1 n) (lubp D f2)).
+  { intros. eapply (Ole_trans D).
+    - apply H.
+    - apply (le_lub D). }
+  apply (lub_le D). apply H0.
+  Qed.
 
 Lemma lubpf_fmono_conti :
   forall (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)),
@@ -425,6 +449,23 @@ Proof.
   - simpl. apply H1. apply IHn.
   Qed.
 
+(** Pointed Domain *)
+
+(*
+   Here, instead of simple implementation
+   Inductive botted (D : cpo) :=
+   | bot : botted D
+   | val : D -> botted D.
+   we use stream based implementation. 
+   Reason here is to make our lubp function be constructive (and computable).
+   If we use simple implementation, to check whether the input is all bot, 
+   we need to check every input, yielding uncomputability.
+   To overcome this problem, we use lazy evaluation property of coinductive types
+   and cofixpoint.
+   Here, if we add antisymmetry, we have
+   Val n <= Eps (Val n) and Eps (Val n) <= Val n, contradicting antisymmetry.
+ *)
+
 CoInductive Stream (D : cpo) := 
   Eps : Stream D -> Stream D |
   Val : D -> Stream D.
@@ -442,6 +483,7 @@ CoInductive DLle {D : cpo} : Stream D -> Stream D -> Prop :=
   | DLleVal : forall d d' n y, 
       pred_nth y n = Val D d' -> Ole D d d' -> DLle (Val D d) y.
 
+(* This lemma creates induction appliable to DLle. *)
 Lemma DLle_rec {D : cpo} : forall R : Stream D -> Stream D -> Prop,
   (forall x y, R (Eps D x) (Eps D y) -> R x y) ->
   (forall x d, R (Eps D x) (Val D d) -> R x (Val D d)) ->
@@ -531,6 +573,23 @@ Definition DL_ord (D : cpo) : ord :=
   DLle_refl
   DLle_trans.
 
+(*
+   Here, to generate lubp, we need to parallely iterate sequence.
+   We iterate 1,1 -> 2,1 -> 1,2 -> 3,1 -> 2,2 -> 1,3
+   (where first number means nth element of sequence, second number means
+    nth epsilon in stream)
+   and whenever element is Eps, we add Eps to output value.
+   Now if we meet value, since c is monotonic, we know later elements in sequence
+   are finite (in sense of stream). Then we can extract its value, returning
+   lubp of these values.
+ *)
+
+(*
+   lubp procedure will require decision procedure based approach.
+   See https://softwarefoundations.cis.upenn.edu/current/vfa-current/Decide.html
+   for more details.
+ *)
+
 Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
 
 Lemma DL_le_lub (D : cpo) :
@@ -554,17 +613,133 @@ Definition DL_cpo (D : cpo) :=
 
 CoFixpoint DL_bot (D : cpo) : Stream D := Eps D (DL_bot D).
 
+Definition DL_destruct (D : cpo) (d : Stream D) :=
+  match d with
+  | Val _ d' => Val D d'
+  | Eps _ d' => Eps D d'
+  end.
+
+Lemma DL_destruct_eq (D : cpo) :
+  forall d, d = DL_destruct D d.
+Proof.
+  intros. case d; simpl; trivial. Qed.
+
+Lemma bot_eq_eps_bot (D : cpo) : 
+  DL_bot D = Eps D (DL_bot D).
+Proof.
+  assert (DL_destruct D (DL_bot D) = Eps D (DL_bot D)).
+  { simpl. reflexivity. }
+  rewrite <- H. apply DL_destruct_eq. Qed.
+
+CoInductive Bisimilar (D : cpo) : Stream D -> Stream D -> Prop :=
+  | Bisimilar_Val : forall d, Bisimilar D (Val D d) (Val D d)
+  | Bisimilar_Eps : forall d d',
+      Bisimilar D d d' -> Bisimilar D (Eps D d) (Eps D d').
+
+Lemma bisimilar_dleq (D : cpo) :
+  forall d d',
+  Bisimilar D d d' -> Ole (DL_cpo D) d d'.
+Proof.
+  cofix H.
+  intros. inversion H0; subst.
+  - simpl. apply DLle_refl.
+  - simpl. constructor. apply H. apply H1.
+  Qed.
+
+CoInductive Infinite (D : cpo) : Stream D -> Prop :=
+  Infinite_Eps : forall d, Infinite D d -> Infinite D (Eps D d).
+Inductive Finite (D : cpo) : Stream D -> Prop :=
+  | Finite_Val : forall d, Finite D (Val D d)
+  | Finite_Eps : forall d, Finite D (d) -> Finite D (Eps D d).
+
+Lemma Infinite_not_Finite (D : cpo) :
+  forall d, Infinite D d -> ~ Finite D d.
+Proof.
+  intros. intro H'. generalize dependent H. induction H'.
+  - intro. inversion H.
+  - intros. inversion H; subst. apply IHH' in H1. destruct H1.
+  Qed.
+
+Lemma finite_pred_nth (D : cpo) :
+  forall d, Finite D d -> exists n d', pred_nth d n = Val D d'.
+Proof.
+  intros. induction H.
+  - exists 0. exists d. reflexivity.
+  - destruct IHFinite as [n [d' IHF]].
+    exists (S n). exists d'. simpl. apply IHF.
+  Qed.
+
+Lemma infinite_bt (D : cpo) :
+  forall d, Infinite D d -> Bisimilar D d (DL_bot D).
+Proof.
+  cofix H.
+  intros. inversion H0; subst.
+  rewrite bot_eq_eps_bot. constructor. apply H. apply H1. Qed.
+
+Lemma pred_nth_over (D : cpo) :
+  forall n d d',
+  pred_nth d n = Val D d' ->
+  pred_nth d (S n) = Val D d'.
+Proof.
+  induction n; intros.
+  - simpl in H. destruct d; try discriminate. inversion H; subst.
+    simpl. reflexivity.
+  - simpl in H. destruct d.
+    + simpl. apply IHn. apply H.
+    + simpl. apply H.
+  Qed.
+
+Lemma pred_nth_val (D : cpo) :
+  forall d n,
+  pred_nth (Val D d) n = Val D d.
+Proof.
+  intros. induction n.
+  - simpl. reflexivity.
+  - simpl. reflexivity.
+  Qed.
+
+Lemma DLle_bot_val (D : cpo) :
+  forall d,
+  DLle (DL_bot D) (Val D d).
+Proof.
+  cofix H.
+  intros. rewrite bot_eq_eps_bot. constructor. apply H.
+  Qed.
+
 Lemma DL_pointed (D : cpo) :
   forall (d : DL_ord D),
   Ole (DL_ord D) (DL_bot D) d.
 Proof.
-  Admitted.
+  cofix H.
+  intros. simpl. destruct d.
+  - rewrite bot_eq_eps_bot. constructor. apply H.
+  - apply DLle_bot_val.
+  Qed.
 
 Instance DL_Pointed (D : cpo) : Pointed (DL_cpo D).
 Proof.
   exists (DL_bot D). apply (DL_pointed D). Qed.
 
-Definition lift {D : cpo} (d : D): DL_cpo D := Val D d. 
+Definition lift (D : cpo) (d : D): DL_cpo D := Val D d. 
+
+Lemma lift_mono (D : cpo) :
+  monotonic D (DL_cpo D) (lift D).
+Proof.
+  unfold monotonic. intros. simpl. unfold lift.
+  apply DLleVal with (n:=0) (d':=y).
+  - simpl. reflexivity.
+  - apply H.
+  Qed.
+
+Definition lift_fmono (D : cpo) := mk_fmono D (DL_cpo D) (lift D) (lift_mono D).
+
+Lemma lift_conti (D : cpo) :
+  continuous D (DL_cpo D) (lift_fmono D).
+Proof.
+  unfold continuous. intros. simpl.
+  unfold lift. econstructor.
+  
+  Admitted.
 
 (* TODO : lift itself is also continuous. *)
 
