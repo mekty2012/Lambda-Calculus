@@ -72,6 +72,7 @@ Definition mono_fun_ord (O1 O2 : ord) : ord :=
   (fle_refl O1 O2)
   (fle_trans O1 O2).
 
+(* This is definition of complete partial order or predomain. *)
 Record cpo := mk_cpo {
   tcpo :> ord;
   lubp: (fmono natO tcpo) -> tcpo;
@@ -200,12 +201,140 @@ Proof.
   apply (lub_le D). apply H0.
   Qed.
 
+Lemma lubp_trivial :
+  forall (D1 D2 : cpo) (f : fmono D1 D2) (x : fmono natO D1),
+  Ole D2 (lubp D2 (fmono_compose D1 D2 f x)) (f (lubp D1 x)).
+Proof.
+  intros.
+  unfold fmono_compose. destruct f. simpl.
+  apply (lub_le D2). intros.
+  simpl. apply fmonotonic0. apply (le_lub D1).
+  Qed.
+
+Definition fun_x_compose (D1 D2 : cpo) 
+      (c : fmono natO (conti_fun_ord D1 D2)) 
+      (x : D1) :=
+      fun m => (fcontit D1 D2 (c m)) x.
+
+Lemma fun_x_mono (D1 D2 : cpo) : 
+      forall (c : fmono natO (conti_fun_ord D1 D2)) (x : D1),
+      monotonic natO D2 (fun_x_compose D1 D2 c x).
+Proof.
+  intros. unfold monotonic. intros.
+  unfold fun_x_compose.
+  destruct c.
+  apply fmonotonic0 in H. simpl.
+  destruct (fmonot0 x0). destruct (fmonot0 y). simpl.
+  simpl in H. unfold cle in H.
+  apply H. Qed.
+
+Definition lubpfx (D1 D2 : cpo)
+      (c : fmono natO (conti_fun_ord D1 D2))
+      (x : fmono natO D1) :=
+      fun n => 
+        lubp D2 (mk_fmono natO D2 (fun_x_compose D1 D2 c (x n)) 
+                                  (fun_x_mono D1 D2 c (x n))).
+
+Lemma lubpfx_mono (D1 D2 : cpo) :
+  forall (c : fmono natO (conti_fun_ord D1 D2)) (x : fmono natO D1),
+  monotonic natO D2 (lubpfx D1 D2 c x).
+Proof.
+  unfold monotonic. intros.
+  unfold lubpfx. destruct c, x.
+  assert (H':=H). assert (H'':=H).
+  apply fmonotonic0 in H. apply fmonotonic1 in H'.
+  simpl in H.
+  apply lubp_preserves_order. intros.
+  simpl. unfold fun_x_compose. simpl.
+  destruct (fmonot0 n). simpl.
+  destruct fcontit0.
+  apply fmonotonic2. assumption.
+  Qed.
+
+Definition lubp_fx (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)) 
+                                (x : fmono natO D1) :=
+    lubp D2 (mk_fmono natO D2 (lubpfx D1 D2 c x) (lubpfx_mono D1 D2 c x)).
+
+Definition x_fun_compose (D1 D2 : cpo) (c : conti_fun_ord D1 D2) (x : fmono natO D1):=
+    fun n => (fcontit D1 D2 c) (x n).
+
+Lemma x_fun_mono (D1 D2 : cpo) :
+  forall (c : conti_fun_ord D1 D2) (x : fmono natO D1),
+  monotonic natO D2 (x_fun_compose D1 D2 c x).
+Proof.
+  unfold monotonic. intros.
+  destruct c. unfold x_fun_compose. simpl.
+  destruct fcontit0. apply fmonotonic0.
+  destruct x. apply fmonotonic1. apply H.
+  Qed.
+
+Definition lubpxf (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2))
+                                (x : fmono natO D1) :=
+    fun m => lubp D2 (mk_fmono natO D2 (x_fun_compose D1 D2 (c m) x) (x_fun_mono D1 D2 (c m) x)).
+
+Lemma lubpxf_mono (D1 D2 : cpo) :
+  forall (c : fmono natO (conti_fun_ord D1 D2)) (x : fmono natO D1),
+  monotonic natO D2 (lubpxf D1 D2 c x).
+Proof.
+  unfold monotonic. intros.
+  unfold lubpxf. destruct c. destruct x. simpl.
+  apply lubp_preserves_order. intro.
+  simpl. unfold x_fun_compose. simpl.
+  apply fmonotonic0 in H. simpl in H.
+  apply H. Qed.
+
+Definition lubp_xf (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2))
+                                 (x : fmono natO D1) :=
+  lubp D2 (mk_fmono natO D2 (lubpxf D1 D2 c x) (lubpxf_mono D1 D2 c x)).
+
+Lemma lubp_xf_fx_eq (D1 D2 : cpo) :
+  forall (c : fmono natO (conti_fun_ord D1 D2)) (x : fmono natO D1),
+  Oeq D2 (lubp_fx D1 D2 c x) (lubp_xf D1 D2 c x).
+Proof.
+  intros. split.
+  - unfold lubp_fx. apply (lub_le D2).
+    intro. unfold lubp_xf. simpl. unfold lubpfx.
+    apply lubp_preserves_order. intro.
+    simpl. unfold fun_x_compose. unfold lubpxf.
+    unfold x_fun_compose. simpl.
+    eapply (Ole_trans D2).
+    2 : { apply (le_lub D2). }
+    simpl. apply (Ole_refl D2).
+  - unfold lubp_xf. apply (lub_le D2).
+    intro. unfold lubp_xf. simpl. unfold lubpxf.
+    unfold lubp_fx. apply lubp_preserves_order.
+    intro. simpl.
+    unfold x_fun_compose. unfold lubpfx.
+    eapply (Ole_trans D2).
+    2 : { apply (le_lub D2). }
+    unfold fun_x_compose. simpl. apply (Ole_refl D2).
+  Qed.
+
 Lemma lubpf_fmono_conti :
   forall (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)),
   continuous D1 D2 (lubpf_fmono D1 D2 c).
 Proof.
-  
-  Admitted.
+  unfold continuous. intros.
+  simpl. unfold lubpf. unfold fmono_compose.
+  apply Ole_trans with (lubp_xf D1 D2 c c0).
+  { unfold conti_swap, lubp_xf.
+    unfold lubpxf. unfold x_fun_compose. simpl.
+    apply lubp_preserves_order. intro. simpl.
+    destruct (c n). simpl.
+    unfold continuous in fcontinuous0.
+    eapply Ole_trans. apply fcontinuous0.
+    unfold fmono_compose. simpl. destruct fcontit0. simpl.
+    apply lubp_preserves_order. intro. simpl. apply Ole_refl. }
+  apply Ole_trans with (lubp_fx D1 D2 c c0).
+  { destruct (lubp_xf_fx_eq D1 D2 c c0).
+    assumption. }
+  unfold lubp_fx, lubpf_fmono. unfold lubpfx.
+  apply lubp_preserves_order.
+  intro. simpl.
+  unfold lubpf. unfold fun_x_compose, conti_swap. simpl.
+  apply lubp_preserves_order. intro.
+  simpl. apply Ole_refl.
+  Qed.
 
 Definition lubpf_fconti (D1 D2 : cpo) (c : fmono natO (conti_fun_ord D1 D2)) :=
   mk_fconti D1 D2
@@ -737,8 +866,7 @@ Lemma lift_conti (D : cpo) :
   continuous D (DL_cpo D) (lift_fmono D).
 Proof.
   unfold continuous. intros. simpl.
-  unfold lift. econstructor.
-  
+  unfold lift. simpl.
   Admitted.
 
 (* TODO : lift itself is also continuous. *)
@@ -753,6 +881,7 @@ Lemma kleisli_mono (D E : cpo) :
   forall (f : fconti D (DL_cpo E)),
   monotonic (DL_cpo D) (DL_cpo E) (kleisli D E f).
 Proof.
+  
   Admitted.
 
 Definition kleisli_fmono (D E : cpo) (f : fconti D (DL_cpo E)) := 
