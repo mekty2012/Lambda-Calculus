@@ -298,7 +298,7 @@ Proof.
     simpl. unfold fun_x_compose. unfold lubpxf.
     unfold x_fun_compose. simpl.
     eapply (Ole_trans D2).
-    2 : { apply (le_lub D2). }
+    2 : apply (le_lub D2).
     simpl. apply (Ole_refl D2).
   - unfold lubp_xf. apply (lub_le D2).
     intro. unfold lubp_xf. simpl. unfold lubpxf.
@@ -306,7 +306,7 @@ Proof.
     intro. simpl.
     unfold x_fun_compose. unfold lubpfx.
     eapply (Ole_trans D2).
-    2 : { apply (le_lub D2). }
+    2 : apply (le_lub D2).
     unfold fun_x_compose. simpl. apply (Ole_refl D2).
   Qed.
 
@@ -362,7 +362,7 @@ Lemma lubpf_lub_le :
   (Ole (conti_fun_ord D1 D2)) (lubpf_fconti D1 D2 c) x.
 Proof.
   intros. simpl. unfold cle. intros. simpl.
-  unfold lubpf. Search lubp.
+  unfold lubpf.
   pose proof (lub_le D2 
     {| fmonot := conti_swap D1 D2 c t; fmonotonic := conti_swap_mono D1 D2 c t |}
     (fcontit D1 D2 x t)
@@ -661,7 +661,7 @@ Proof.
         exists (S n'). exists d'. simpl. split. apply H. apply H'. apply H2.
       * apply IHn with (c2 := (Val D d0)) in H.
         destruct H as [n' [d' [H H']]].
-        2 : { apply H2. }
+        2 : apply H2.
         exists 0. exists d0. split. reflexivity.
         destruct n'; simpl in H; inversion H; subst; apply H'.
     + inversion H; subst. clear H.
@@ -711,12 +711,6 @@ Definition DL_ord (D : cpo) : ord :=
    Now if we meet value, since c is monotonic, we know later elements in sequence
    are finite (in sense of stream). Then we can extract its value, returning
    lubp of these values.
- *)
-
-(*
-   lubp procedure will require decision procedure based approach.
-   See https://softwarefoundations.cis.upenn.edu/current/vfa-current/Decide.html
-   for more details.
  *)
 
 Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
@@ -789,6 +783,15 @@ Proof.
   - intros. inversion H; subst. apply IHH' in H1. destruct H1.
   Qed.
 
+Lemma Finite_not_Infinite (D : cpo) :
+  forall d, Finite D d -> ~ Infinite D d.
+Proof.
+  intros. induction H.
+  - intro contra. inversion contra.
+  - intro contra. inversion contra; subst.
+    apply IHFinite in H1. destruct H1.
+  Qed.
+
 Lemma finite_pred_nth (D : cpo) :
   forall d, Finite D d -> exists n d', pred_nth d n = Val D d'.
 Proof.
@@ -797,6 +800,49 @@ Proof.
   - destruct IHFinite as [n [d' IHF]].
     exists (S n). exists d'. simpl. apply IHF.
   Qed.
+
+Lemma pred_nth_finite (D : cpo) :
+  forall n d d', pred_nth d n = Val D d' -> Finite D d.
+Proof.
+  induction n.
+  - intros. simpl in H. destruct d.
+    + inversion H.
+    + constructor.
+  - intros. simpl in H. destruct d.
+    + apply IHn in H.
+      constructor. assumption.
+    + constructor.
+  Qed.
+
+Class finite_evidence (D : cpo) (d : Stream D) := {pred_n : nat; pred_d' : D; pred : pred_nth d pred_n = Val D pred_d'}.
+
+Lemma eps_finite_finite (D : cpo) :
+  forall d, Finite D (Eps D d) -> Finite D d.
+Proof.
+  intros. inversion H; subst. apply H1. Defined.
+
+Fixpoint extract_evidence (D : cpo) (d : Stream D) (H : Finite D d) : finite_evidence D d.
+Proof.
+  destruct d.
+- apply eps_finite_finite in H. apply extract_evidence in H.
+  destruct H.
+  exists (S pred_n0) (pred_d'0). simpl. apply pred0.
+- exists 0 t. reflexivity.
+Defined.
+
+Lemma finite_DLle_finite (D : cpo) : forall d d',
+  Finite D d ->
+  DLle d d' ->
+  Finite D d'.
+Proof.
+  intros. generalize dependent d'. induction H; intros.
+  - inversion H0; subst. apply pred_nth_finite in H1.
+    assumption.
+  - inversion H0; subst.
+    + apply IHFinite in H2.
+      constructor. assumption.
+    + constructor.
+  Defined.
 
 Lemma infinite_bt (D : cpo) :
   forall d, Infinite D d -> Bisimilar D d (DL_bot D).
