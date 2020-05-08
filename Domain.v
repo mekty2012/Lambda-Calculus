@@ -702,38 +702,6 @@ Definition DL_ord (D : cpo) : ord :=
   DLle_refl
   DLle_trans.
 
-(*
-   Here, to generate lubp, we need to parallely iterate sequence.
-   We iterate 1,1 -> 2,1 -> 1,2 -> 3,1 -> 2,2 -> 1,3
-   (where first number means nth element of sequence, second number means
-    nth epsilon in stream)
-   and whenever element is Eps, we add Eps to output value.
-   Now if we meet value, since c is monotonic, we know later elements in sequence
-   are finite (in sense of stream). Then we can extract its value, returning
-   lubp of these values.
- *)
-
-Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
-
-Lemma DL_le_lub (D : cpo) :
-  forall (c : fmono natO (DL_ord D)) (n : nat),
-    (Ole (DL_ord D)) (c n) (DL_lubp D c).
-Proof.
-  Admitted.
-
-Lemma DL_lub_le (D : cpo) :
-  forall (c : fmono natO (DL_ord D)) (x : (DL_ord D)),
-    (forall n, (Ole (DL_ord D)) (c n) x) -> (Ole (DL_ord D)) (DL_lubp D c) x.
-Proof.
-  Admitted.
-
-Definition DL_cpo (D : cpo) := 
-  mk_cpo
-  (DL_ord D)
-  (DL_lubp D)
-  (DL_le_lub D)
-  (DL_lub_le D).
-
 CoFixpoint DL_bot (D : cpo) : Stream D := Eps D (DL_bot D).
 
 Definition DL_destruct (D : cpo) (d : Stream D) :=
@@ -759,18 +727,10 @@ CoInductive Bisimilar (D : cpo) : Stream D -> Stream D -> Prop :=
   | Bisimilar_Eps : forall d d',
       Bisimilar D d d' -> Bisimilar D (Eps D d) (Eps D d').
 
-Lemma bisimilar_dleq (D : cpo) :
-  forall d d',
-  Bisimilar D d d' -> Ole (DL_cpo D) d d'.
-Proof.
-  cofix H.
-  intros. inversion H0; subst.
-  - simpl. apply DLle_refl.
-  - simpl. constructor. apply H. apply H1.
-  Qed.
 
 CoInductive Infinite (D : cpo) : Stream D -> Prop :=
   Infinite_Eps : forall d, Infinite D d -> Infinite D (Eps D d).
+
 Inductive Finite (D : cpo) : Stream D -> Prop :=
   | Finite_Val : forall d, Finite D (Val D d)
   | Finite_Eps : forall d, Finite D (d) -> Finite D (Eps D d).
@@ -829,6 +789,25 @@ Proof.
   exists (S pred_n0) (pred_d'0). simpl. apply pred0.
 - exists 0 t. reflexivity.
 Defined.
+
+Definition extract_val (D : cpo) (d : Stream D) (H : Finite D d) : D :=
+  @pred_d' D d (extract_evidence D d H).
+
+Example EpsVal_Finite :
+  Finite (discrete_cpo nat) (Eps (discrete_cpo nat) (Val (discrete_cpo nat) 3)).
+Proof.
+  constructor. constructor. Defined.
+
+Example fin_evidence_manipulate :
+  finite_evidence (discrete_cpo nat) (Eps (discrete_cpo nat) (Val (discrete_cpo nat) 3)).
+Proof.
+  apply extract_evidence. apply EpsVal_Finite. Qed.
+
+Lemma evidence_extract (D : cpo) :
+  forall d,
+  finite_evidence D d -> exists n d', pred_nth d n = Val D d'.
+Proof.
+  intros. eapply ex_intro. eapply ex_intro. apply (@pred D d X). Qed.
 
 Lemma finite_DLle_finite (D : cpo) : forall d d',
   Finite D d ->
@@ -891,9 +870,213 @@ Proof.
   - apply DLle_bot_val.
   Qed.
 
+
+(*
+   Here, to generate lubp, we need to parallely iterate sequence.
+   We iterate 1,1 -> 2,1 -> 1,2 -> 3,1 -> 2,2 -> 1,3
+   (where first number means nth element of sequence, second number means
+    nth epsilon in stream)
+   and whenever element is Eps, we add Eps to output value.
+   Now if we meet value, since c is monotonic, we know later elements in sequence
+   are finite (in sense of stream). Then we can extract its value, returning
+   lubp of these values.
+ *)
+
+Definition unlayer (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) : natO -> DL_ord D :=
+  fun n' => 
+    if n' <=? n then
+      match (c n') with
+      | Eps _ cn' => cn'
+      | Val _ cn' => Val D cn'
+      end
+    else c n'.
+
+Fixpoint find_val (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) : option (prod nat D) :=
+  match (c n) with
+  | Eps _ _ =>
+    match n with
+    | S n' => find_val D c n'
+    | 0 => None
+    end
+  | Val _ d' => Some (n, d')
+  end.
+
+Lemma Finite_monotonic (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (n : nat),
+  Finite D (c n) -> (forall n', n' >= n -> Finite D (c n')).
+Proof.
+  intros. destruct c.
+  apply fmonotonic0 in H0.
+  Search Finite. eapply finite_DLle_finite in H.
+  2 : apply H0.
+  apply H. Qed.
+
+Definition fmono_extract (D : cpo) (c : fmono natO (DL_ord D)) (t : forall n, Finite D (c n)) :=
+  fun n' =>
+    (extract_evidence D (c n') (t n')).
+
+Check fmono_extract.
+
+Lemma DL_le_eps (D : cpo) :
+  forall t, DLle t (Eps D t).
+Proof.
+  cofix H.
+  intros. destruct t.
+  - constructor. apply H.
+  - apply DLleVal with t 1.
+    simpl. reflexivity. apply Ole_refl.
+  Qed.
+
+Lemma DL_eps_le (D : cpo) :
+  forall t, DLle (Eps D t) t.
+Proof.
+  cofix H.
+  intros. destruct t.
+  - constructor. apply H.
+  - constructor. apply DLle_refl.
+  Qed.
+
+Lemma unlayer_mono (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (n : nat),
+  monotonic natO (DL_ord D) (unlayer D c n).
+Proof.
+  intros. unfold monotonic. intros.
+  unfold unlayer. simpl.
+  Search leb.
+  destruct (Nat.leb_spec0 x n); destruct (Nat.leb_spec0 y n).
+  - destruct c. simpl.
+    apply fmonotonic0 in H.
+    destruct (fmonot0 x); destruct (fmonot0 y).
+    + inversion H; subst. apply H2.
+    + inversion H; subst. apply H2.
+    + inversion H; subst. apply DLleVal with (d') (n0).
+      Search pred_nth. Search pred_nth. apply pred_nth_over in H1.
+      simpl in H1. apply H1. apply H2.
+    + inversion H; subst. rewrite pred_nth_val in H1.
+      inversion H1; subst. apply DLleVal with d' 0.
+      simpl. reflexivity. apply H2.
+  - destruct c. apply fmonotonic0 in H.
+    simpl. destruct (fmonot0 x).
+    + apply (DLle_trans) with (Eps D t).
+      * apply DL_le_eps.
+      * apply H.
+    + simpl in H. assumption.
+  - destruct c. apply fmonotonic0 in H.
+    simpl. destruct (fmonot0 y).
+    + inversion H; subst.
+      * eapply DLle_trans. apply DL_eps_le.
+        assumption.
+      * destruct n1. inversion H1.
+        simpl in H1.
+        econstructor. apply H1. apply H2.
+    + simpl in H. apply H.
+  - destruct c. apply fmonotonic0. apply H.
+  Qed.
+
+(*
+ *  We start iteration from (1,1), (2,1), (1,2), ...
+ *  This can be formalized by...?
+ *)
+
+Definition unlayer_one (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) : natO -> (DL_ord D) :=
+  fun (n' : nat) =>
+    if (n =? n') then
+      match (c n) with
+      | Eps _ d => d
+      | Val _ d => Val D d
+      end
+    else
+      (c n).
+
+Lemma unlayer_one_mono (D : cpo) :
+  forall c n, monotonic natO (DL_ord D) (unlayer_one D c n).
+Proof.
+  intros. unfold monotonic. intros.
+  simpl. destruct c. unfold unlayer_one. simpl.
+  assert (H':=H). apply fmonotonic0 in H'.
+  destruct (n =? x).
+  - destruct (n =? y).
+    + destruct (fmonot0 n).
+      apply DLle_refl. apply DLle_refl.
+    + destruct (fmonot0 n).
+      apply DL_le_eps. apply DLle_refl.
+  - destruct (n =? y).
+    + destruct (fmonot0 n).
+      apply DL_eps_le. apply DLle_refl.
+    + apply DLle_refl.
+  Qed.
+
+Definition mono_unlayer_one (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) 
+  : fmono natO (DL_ord D) :=
+  mk_fmono natO (DL_ord D) (unlayer_one D c n) (unlayer_one_mono D c n).
+
+Definition mono_drop_n (O : ord) (c : fmono natO O) (n : nat) : nat -> O :=
+  fun (n' : nat) => (c (n' - n)).
+
+Lemma mono_drop_n_monotone (O : ord) :
+  forall c n, monotonic natO O (mono_drop_n O c n).
+Proof.
+  intros. unfold monotonic. intros. destruct c.
+  unfold mono_drop_n. simpl.
+  assert (Ole natO (x - n) (y - n)).
+  { simpl. simpl in H. omega. }
+  apply fmonotonic0 in H0. assumption.
+  Qed.
+
+Definition fmono_drop_n (O : ord) (c : fmono natO O) (n : nat) : fmono natO O := 
+  mk_fmono natO O (mono_drop_n O c n) (mono_drop_n_monotone O c n).
+
+Definition extract_seq (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) (n : nat) : Finite D (c n).
+Proof.
+  eapply Finite_monotonic. apply H. omega. Defined.
+
+Definition extract_evid_seq (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) (n : nat) : finite_evidence D (c n).
+Proof.
+  apply extract_evidence. eapply Finite_monotonic. apply H. omega. Defined.
+
+Definition extract_capsule (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) : nat -> D :=
+  fun n => @pred_d' D (c n) (extract_evid_seq D c H n).
+(*
+Definition DL_lubp_fin (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) (H : Finite D (c n)) : DL_ord D :=
+  *)
+(*
+CoFixpoint DL_lubp_aux (D : cpo) (c : fmono natO (DL_ord D)) (n m : nat) : DL_ord D :=
+  *)
+
+Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
+
+Lemma DL_le_lub (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (n : nat),
+    (Ole (DL_ord D)) (c n) (DL_lubp D c).
+Proof.
+  Admitted.
+
+Lemma DL_lub_le (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (x : (DL_ord D)),
+    (forall n, (Ole (DL_ord D)) (c n) x) -> (Ole (DL_ord D)) (DL_lubp D c) x.
+Proof.
+  Admitted.
+
+Definition DL_cpo (D : cpo) := 
+  mk_cpo
+  (DL_ord D)
+  (DL_lubp D)
+  (DL_le_lub D)
+  (DL_lub_le D).
+
 Instance DL_Pointed (D : cpo) : Pointed (DL_cpo D).
 Proof.
   exists (DL_bot D). apply (DL_pointed D). Qed.
+
+Lemma bisimilar_dleq (D : cpo) :
+  forall d d',
+  Bisimilar D d d' -> Ole (DL_cpo D) d d'.
+Proof.
+  cofix H.
+  intros. inversion H0; subst.
+  - simpl. apply DLle_refl.
+  - simpl. constructor. apply H. apply H1.
+  Qed.
 
 Definition lift (D : cpo) (d : D): DL_cpo D := Val D d. 
 
