@@ -907,7 +907,7 @@ Lemma Finite_monotonic (D : cpo) :
 Proof.
   intros. destruct c.
   apply fmonotonic0 in H0.
-  Search Finite. eapply finite_DLle_finite in H.
+  eapply finite_DLle_finite in H.
   2 : apply H0.
   apply H. Qed.
 
@@ -942,7 +942,6 @@ Lemma unlayer_mono (D : cpo) :
 Proof.
   intros. unfold monotonic. intros.
   unfold unlayer. simpl.
-  Search leb.
   destruct (Nat.leb_spec0 x n); destruct (Nat.leb_spec0 y n).
   - destruct c. simpl.
     apply fmonotonic0 in H.
@@ -950,7 +949,7 @@ Proof.
     + inversion H; subst. apply H2.
     + inversion H; subst. apply H2.
     + inversion H; subst. apply DLleVal with (d') (n0).
-      Search pred_nth. Search pred_nth. apply pred_nth_over in H1.
+      apply pred_nth_over in H1.
       simpl in H1. apply H1. apply H2.
     + inversion H; subst. rewrite pred_nth_val in H1.
       inversion H1; subst. apply DLleVal with d' 0.
@@ -1011,14 +1010,14 @@ Definition mono_unlayer_one (D : cpo) (c : fmono natO (DL_ord D)) (n : nat)
   mk_fmono natO (DL_ord D) (unlayer_one D c n) (unlayer_one_mono D c n).
 
 Definition mono_drop_n (O : ord) (c : fmono natO O) (n : nat) : nat -> O :=
-  fun (n' : nat) => (c (n' - n)).
+  fun (n' : nat) => (c (n' + n)).
 
 Lemma mono_drop_n_monotone (O : ord) :
   forall c n, monotonic natO O (mono_drop_n O c n).
 Proof.
   intros. unfold monotonic. intros. destruct c.
   unfold mono_drop_n. simpl.
-  assert (Ole natO (x - n) (y - n)).
+  assert (Ole natO (x + n) (y + n)).
   { simpl. simpl in H. omega. }
   apply fmonotonic0 in H0. assumption.
   Qed.
@@ -1030,15 +1029,115 @@ Definition extract_seq (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)
 Proof.
   eapply Finite_monotonic. apply H. omega. Defined.
 
-Definition extract_evid_seq (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) (n : nat) : finite_evidence D (c n).
-Proof.
-  apply extract_evidence. eapply Finite_monotonic. apply H. omega. Defined.
-
 Definition extract_capsule (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) : nat -> D :=
-  fun n => @pred_d' D (c n) (extract_evid_seq D c H n).
-(*
+  fun n => extract_val D (c n) (extract_seq D c H n).
+
+Lemma pred_n_or (D : cpo) :
+  forall (d : DL_ord D) (n : nat),
+  pred_nth (Eps D d) n = Eps D (pred_nth d n) \/ pred_nth (Eps D d) n = pred_nth d n.
+Proof.
+  intros. generalize dependent d. induction n.
+  - intros. simpl. left. destruct d; reflexivity.
+  - intros. simpl. destruct d.
+    + apply IHn.
+    + rewrite pred_nth_val. right. reflexivity.
+  Qed.
+
+Lemma pred_n_1_eq (D : cpo) :
+  forall (d : DL_ord D) (n : nat),
+  DLle (pred_nth d n) (pred_nth (Eps D d) n) /\ DLle (pred_nth (Eps D d) n) (pred_nth d n).
+Proof.
+  intros. split.
+  - pose proof (pred_n_or D d n).
+    destruct H.
+    + rewrite -> H. apply DL_le_eps.
+    + rewrite -> H. apply DLle_refl.
+  - pose proof (pred_n_or D d n).
+    destruct H.
+    + rewrite -> H. apply DL_eps_le.
+    + rewrite -> H. apply DLle_refl.
+  Qed.
+
+Lemma pred_n_eq (D : cpo) :
+  forall (d : DL_ord D) (n : nat),
+  DLle d (pred_nth d n) /\ DLle (pred_nth d n) d.
+Proof.
+  intros. split.
+  - induction n.
+    + simpl. destruct d. apply DLle_refl. apply DLle_refl.
+    + destruct d.
+      * simpl. eapply DLle_trans. apply IHn.
+        pose proof (pred_n_1_eq D d n).
+        destruct H. assumption.
+      * simpl. apply DLle_refl.
+  - induction n.
+    + simpl. destruct d. apply DLle_refl. apply DLle_refl.
+    + simpl. destruct d.
+      * eapply DLle_trans. 2 : apply IHn.
+        pose proof (pred_n_1_eq D d n).
+        destruct H. assumption.
+      * apply DLle_refl.
+  Qed.
+
+Lemma extract_sound (D : cpo) :
+  forall (d : DL_ord D) (H : Finite D d),
+  DLle d (Val D (extract_val D d H)) /\ DLle (Val D (extract_val D d H)) d.
+Proof.
+  intros. split.
+  - unfold extract_val. unfold pred_d'.
+    assert (H':=H). apply finite_pred_nth in H'. destruct H'. destruct H0.
+    remember (extract_evidence D d H). destruct f.
+    rewrite <- pred0. pose proof (pred_n_eq D d pred_n0).
+    destruct H1. assumption.
+  - unfold extract_val. unfold pred_d'.
+    assert (H':=H). apply finite_pred_nth in H'. destruct H'. destruct H0.
+    remember (extract_evidence D d H). destruct f.
+    rewrite <- pred0. pose proof (pred_n_eq D d pred_n0).
+    destruct H1. assumption.
+  Qed.
+
+Lemma extract_monotonic (D : cpo) :
+  forall (d1 d2 : DL_ord D) (H1 : Finite D d1) (H2 : Finite D d2),
+  DLle d1 d2 ->
+  Ole D (extract_val D d1 H1) (extract_val D d2 H2).
+Proof.
+  intros.
+  assert (DLle (Val D (extract_val D d1 H1)) (Val D (extract_val D d2 H2))).
+  { eapply DLle_trans.
+    { pose proof (extract_sound D d1 H1).
+      destruct H0. apply H3. }
+    eapply DLle_trans. apply H.
+    pose proof (extract_sound D d2 H2).
+    destruct H0. assumption.
+  }
+  inversion H0; subst.
+  rewrite pred_nth_val in H4. inversion H4; subst.
+  assumption.
+  Qed.
+
+Lemma mono_extract_capsule (D : cpo) :
+  forall (c : fmono natO (DL_ord D)) (H : Finite D (c 0)),
+  monotonic natO D (extract_capsule D c H).
+Proof.
+  intros. unfold monotonic.
+  intros. unfold extract_capsule. apply extract_monotonic.
+  destruct c. apply fmonotonic0. apply H0.
+  Qed.
+
+Definition fmono_extract_capsule (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) :=
+  mk_fmono natO D (extract_capsule D c H) (mono_extract_capsule D c H).
+
+Definition DL_lubp_fin_0 (D : cpo) (c : fmono natO (DL_ord D)) (H : Finite D (c 0)) : DL_ord D :=
+  Val D (lubp D (fmono_extract_capsule D c H)).
+
+Definition drop_finite (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) (H : Finite D (c n)) :
+  Finite D ((fmono_drop_n (DL_ord D) c n) 0).
+Proof.
+  simpl. unfold mono_drop_n. simpl. assumption. Defined.
+
 Definition DL_lubp_fin (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) (H : Finite D (c n)) : DL_ord D :=
-  *)
+  DL_lubp_fin_0 D (fmono_drop_n (DL_ord D) c n) (drop_finite D c n H).
+
 (*
 CoFixpoint DL_lubp_aux (D : cpo) (c : fmono natO (DL_ord D)) (n m : nat) : DL_ord D :=
   *)
