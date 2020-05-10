@@ -1138,11 +1138,21 @@ Proof.
 Definition DL_lubp_fin (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) (H : Finite D (c n)) : DL_ord D :=
   DL_lubp_fin_0 D (fmono_drop_n (DL_ord D) c n) (drop_finite D c n H).
 
-(*
-CoFixpoint DL_lubp_aux (D : cpo) (c : fmono natO (DL_ord D)) (n m : nat) : DL_ord D :=
-  *)
+Definition val_finite_pat (D : cpo) (c : fmono natO (DL_ord D)) (n : nat) :
+  forall dl,
+  c n = Val D dl -> Finite D (c n).
+Proof.
+  intros. rewrite H. apply Finite_Val. Defined.
 
-Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D. Admitted.
+CoFixpoint DL_lubp_aux (D : cpo) (c : fmono natO (DL_ord D)) (n m : nat) : DL_ord D.
+  destruct (c n) eqn:E.
+  - destruct n eqn:En.
+    + apply (Eps D (DL_lubp_aux D (mono_unlayer_one D c 0) (S m) 0)).
+    + apply (Eps D (DL_lubp_aux D (mono_unlayer_one D c n) n0 (S m))).
+  - apply (DL_lubp_fin D c n ((val_finite_pat D c n t) E)).
+  Defined.
+
+Definition DL_lubp (D : cpo) (c : fmono natO (DL_ord D)) : DL_ord D := DL_lubp_aux D c 0 0.
 
 Lemma DL_le_lub (D : cpo) :
   forall (c : fmono natO (DL_ord D)) (n : nat),
@@ -1205,11 +1215,20 @@ CoFixpoint kleisli (D E : cpo) (f : fconti D (DL_cpo E)) (d : DL_cpo D): (DL_cpo
   | Val _ d' => (fcontit D (DL_cpo E) f) d'
   end.
 
+Lemma kleisli_unfold (D E : cpo) :
+  forall (f : fconti D (DL_cpo E)) (d : DL_cpo D),
+  kleisli D E f (Eps D d) = Eps E (kleisli D E f d).
+Proof.
+  intros.
+  assert (kleisli D E f (Eps D d) = DL_destruct E (kleisli D E f (Eps D d))).
+  { apply DL_destruct_eq. }
+  rewrite H. simpl. reflexivity.
+  Qed.
+
 Lemma kleisli_mono (D E : cpo) :
   forall (f : fconti D (DL_cpo E)),
   monotonic (DL_cpo D) (DL_cpo E) (kleisli D E f).
 Proof.
-  
   Admitted.
 
 Definition kleisli_fmono (D E : cpo) (f : fconti D (DL_cpo E)) := 
