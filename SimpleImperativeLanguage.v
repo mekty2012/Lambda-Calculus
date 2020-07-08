@@ -85,10 +85,41 @@ From PLT Require Import Domain.
 
 Definition discrete_nat_cpo := discrete_cpo nat.
 Definition discrete_string_cpo := discrete_cpo string.
-Definition state_cpo := fconti_cpo discrete_nat_cpo discrete_string_cpo.
+Definition state_cpo := fconti_cpo discrete_string_cpo discrete_nat_cpo.
 Definition semantic_cpo := fconti_cpo (state_cpo) (DL_cpo state_cpo).
 
+Definition state2mono (s : state) : fmono discrete_string_cpo discrete_nat_cpo.
+  unfold state in s. unfold total_map in s. exists s.
+  unfold monotonic. intros. simpl. inversion H; subst.
+  reflexivity. Defined.
 
+Definition state2cpo (s : state) : state_cpo.
+  exists (state2mono s). unfold continuous.
+  intros. simpl. reflexivity. Defined.
 
+Fixpoint SIL_step (l : SILang) (s : state) : SILang * state :=
+  match l with
+  | SISkip => (SISkip, s)
+  | SIAssn x a => (SISkip, t_update s x (aeval s a))
+  | SISeq fst snd =>
+    match fst with
+    | SISkip => (snd, s)
+    | _ => let (fst', s') := (SIL_step fst s) in (SISeq fst' snd, s')
+    end
+  | SIIf c thene elsee =>
+    match (beval s c) with
+    | true => (thene, s)
+    | false => (elsee, s)
+    end
+  | SIWhile c b =>
+    match (beval s c) with
+    | true => (SISeq b (SIWhile c b), s)
+    | false => (SISkip, s)
+    end
+  end.
 
-
+CoFixpoint SIL_denot_sem (l : SILang) (s : state) : DL_cpo state_cpo :=
+  match l with
+  | SISkip => Val state_cpo (state2cpo s)
+  | _ => let (l', s') := (SIL_step l s) in Eps state_cpo (SIL_denot_sem l' s')
+  end.
